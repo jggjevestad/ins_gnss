@@ -29,7 +29,8 @@ function main
     % Read IMU observations
     [dw, dv, t] = read_imu(filename, N, t0);
     fprintf('Initial epoch ToW: %.6f s | Records: %d\n', t(1), size(dw, 1));
-    fprintf('dw (rad): [%.3e, %.3e, %.3e] | dv (m/s): [%.3e, %.3e, %.3e]\n', dw(1, :), dv(1, :));
+    fprintf('dw [rad/s]: [%.3e, %.3e, %.3e] \n', dw(1, :));
+    fprintf('dv [m/s]: [%.3e, %.3e, %.3e]\n', dv(1, :));
 
     % Earth rotation rate vector and skew matrix in ECEF [rad/s]
     wie_e = [0; 0; 7292115e-11];
@@ -76,6 +77,9 @@ function main
     % Benchmark against reference trajectory if available
     compare_reference(t, x_est, v_est, 'data/traj.txt');
 end
+
+
+% --- Local Functions ---
 
 % C.2 Numerical integration of position and velocity (Eq. 59-62b)
 function [x, v, dv_e] = integrate_pos_vel(x, v, dv, rho, dt, Cs_e_next, Wie_e)
@@ -204,7 +208,7 @@ function compare_reference(t_est, x_est, v_est, traj_file)
     v_ref = traj(:, 5:7);
 
     fprintf('\n--- Comparison against reference solution (%s) ---\n', traj_file);
-    fprintf('%-11s | %-24s | %-24s\n', 'Time (s)', 'Pos Error [dX, dY, dZ] (m)', 'Vel Error [dVx, dVy, dVz] (m/s)');
+    fprintf('%-11s | %-24s | %-24s\n', 'Time (s)', 'Pos Error [dX, dY, dZ] [m]', 'Vel Error [dVx, dVy, dVz] [m/s]');
     fprintf('%s\n', repmat('-', 1, 66));
 
     for i = 1:length(t_ref)
