@@ -9,14 +9,14 @@
 % Ce_g: ECEF to local level (NED) frame
 % Cg_p: NED to platform frame (roll/pitch/yaw)
 % Cs_p: Sensor to platform frame
-% Cp_b: Platform to body frame
+% Cp_b: Platform to body frame (gyro stabilized IMU)
 % Cp_c: Platform to camera frame (sensor orientation)
 % Cm_c: Map to camera frame (omega/phi/kappa)
 
 function main
     % System parameters
     filename = 'data/primary_imu.dat';
-    N = 1000;
+    N = 3000;
 
     % Initial parameters from first line of data/traj.txt (epoch 198300.000259 s)
     t0   = 198300.000259;                              % Initial GPS Time of Week [s]
@@ -37,7 +37,8 @@ function main
     Wie_e = skew(wie_e);
 
     % Initial attitude DCM: Cs_e = (Cg_p * Ce_g)'
-    Cs_e = (Cg_p * ecef2ned(x0_e))';
+    Ce_g = ecef2ned(x0_e);
+    Cs_e = (Cg_p * Ce_g)';
 
     % State trajectories
     x_est = zeros(N, 3);
@@ -69,8 +70,7 @@ function main
     end
     t_elapsed = toc;
 
-    fprintf('Propagation completed: %d epochs in %.4f s (%.1f kHz)\n', ...
-        N, t_elapsed, (N - 1) / t_elapsed / 1000);
+    fprintf('Propagation completed: %d epochs in %.4f s (%.1f kHz)\n', N, t_elapsed, (N - 1) / t_elapsed / 1000);
     fprintf('Estimated position (end) [m]:   [%.4f, %.4f, %.4f]\n', x_est(end, :));
     fprintf('Estimated velocity (end) [m/s]: [%.4f, %.4f, %.4f]\n', v_est(end, :));
 
@@ -116,6 +116,19 @@ function [Cs_e_next, rho] = integrate_dcm(Cs_e, dw, dt, wie_e)
     Cs_e_next = 1.5 * Cs_e_next - 0.5 * Cs_e_next * (Cs_e_next' * Cs_e_next);
 end
 
+% ECEF coordinates to geodetic coordinates (latitude, longitude, height)
+function [lat, lon, h] = ecef2geod(x)
+    a = 6378137.0; f = 1 / 298.257223563; b = a * (1 - f);
+    ep2 = (a^2 - b^2) / b^2; e2 = 2 * f - f^2;
+    
+    % Bowring's formulae for latitude, longitude, and height
+    p = hypot(x(1), x(2));
+    my = atan2(x(3) * a, p * b);
+    lat = atan2(x(3) + ep2 * b * sin(my)^3, p - e2 * a * cos(my)^3);
+    lon = atan2(x(2), x(1));
+    h = p / cos(lat) - a / sqrt(1 - e2 * sin(lat)^2);
+end
+
 % Normal gravity vector in ECEF frame: ge = C_g^e * gamma^g (Appendix A, F)
 function ge = normal_gravity_ecef(x)
     % WGS-84 ellipsoid constants
@@ -125,39 +138,33 @@ function ge = normal_gravity_ecef(x)
     m = (7292115e-11)^2 * a^2 * b / 3986004.418e8;
 
     % Geodetic latitude, longitude, height (Bowring)
-    p = hypot(x(1), x(2));
-    th = atan2(x(3) * a, p * b);
-    phi = atan2(x(3) + ep2 * b * sin(th)^3, p - e2 * a * cos(th)^3);
-    lam = atan2(x(2), x(1));
-    h = p / cos(phi) - a / sqrt(1 - e2 * sin(phi)^2);
+    [lat, lon, h] = ecef2geod(x);
+
+    % Direction Cosine Matrix from ECEF to local NED frame: Ce_g (Appendix A, Eq. 48)
+    Ce_g = ecef2ned(x);
 
     % Normal gravity on ellipsoid and at height h (Eq. 67, 69)
-    s = sin(phi); c = cos(phi);
-    g0 = (a * gamma_a * c^2 + b * gamma_b * s^2) / sqrt(a^2 * c^2 + b^2 * s^2);
-    gh = g0 * (1 - (2 / a) * (1 + f + m - 2 * f * s^2) * h + (3 / a^2) * h^2);
+    g0 = (a * gamma_a * cos(lat)^2 + b * gamma_b * sin(lat)^2) / sqrt(a^2 * cos(lat)^2 + b^2 * sin(lat)^2);
+    gh = g0 * (1 - (2 / a) * (1 + f + m - 2 * f * sin(lat)^2) * h + (3 / a^2) * h^2);
 
     % North-south component (Eq. 70)
     f2 = -f + 2.5 * m + 0.5 * f^2 - (26 / 7) * f * m + 3.75 * m^2;
-    gN = -((f2 - 0.5 * f^2 + 2.5 * f * m) / 6371000) * h * sin(2 * phi);
+    gN = -((f2 - 0.5 * f^2 + 2.5 * f * m) / 6371000) * h * sin(2 * lat);
 
     % Transform from NED to ECEF: C_g^e * [gN; 0; gh] via Ce_g' (Appendix A, Eq. 48)
-    ge = [-s * cos(lam) * gN - c * cos(lam) * gh;
-          -s * sin(lam) * gN - c * sin(lam) * gh;
-           c * gN            - s * gh           ];
+    ge = Ce_g' * [gN; 0; gh];
 end
 
 % Direction Cosine Matrix from ECEF to local NED frame: Ce_g (Appendix A, Eq. 48)
 function Ce_g = ecef2ned(x)
-    a = 6378137.0; f = 1 / 298.257223563; b = a * (1 - f);
-    ep2 = (a^2 - b^2) / b^2; e2 = 2 * f - f^2;
-    p = hypot(x(1), x(2));
-    th = atan2(x(3) * a, p * b);
-    phi = atan2(x(3) + ep2 * b * sin(th)^3, p - e2 * a * cos(th)^3);
-    lam = atan2(x(2), x(1));
-    s = sin(phi); c = cos(phi);
-    Ce_g = [-s * cos(lam), -s * sin(lam),  c;
-            -sin(lam),      cos(lam),      0;
-            -c * cos(lam), -c * sin(lam), -s];
+
+    % Geodetic latitude, longitude, height (Bowring)
+    [lat, lon, ~] = ecef2geod(x);
+
+    % Construct direction cosine matrix from ECEF to NED (Appendix A, Eq. 48)
+    Ce_g = [-sin(lat) * cos(lon), -sin(lat) * sin(lon),  cos(lat);   % north
+            -sin(lon),              cos(lon),               0;       % east
+            -cos(lat) * cos(lon), -cos(lat) * sin(lon), -sin(lat)];  % down
 end
 
 % Skew-symmetric cross product matrix: skew(x) * y = cross(x, y)
