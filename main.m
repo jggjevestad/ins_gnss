@@ -18,6 +18,17 @@ function main
     filename = 'data/primary_imu.dat';
     N = 3000;
 
+    % WGS-84 ellipsoid parameters
+    global a b f e2 ep2 gamma_a gamma_b m
+    a = 6378137.0;                              % Semi-major axis [m]
+    f = 1 / 298.257223563;                      % Flattening
+    b = a * (1 - f);                            % Semi-minor axis [m]
+    e2 = (a^2 - b^2) / a^2;                     % First eccentricity squared
+    ep2 = (a^2 - b^2) / b^2;                    % Second eccentricity squared
+    gamma_a = 9.7803253359;                     % Normal gravity at equator [m/s^2]
+    gamma_b = 9.8321849378;                     % Normal gravity at pole [m/s^2]
+    m = (7292115e-11)^2 * a^2 * b / 3986004.418e8;
+
     % Initial parameters from first line of data/traj.txt (epoch 198300.000259 s)
     t0   = 198300.000259;                              % Initial GPS Time of Week [s]
     x0_e = [3208319.5845; 633237.6578; 5458116.3716];  % Initial position in ECEF [m]
@@ -118,8 +129,7 @@ end
 
 % ECEF coordinates to geodetic coordinates (latitude, longitude, height)
 function [lat, lon, h] = ecef2geod(x)
-    a = 6378137.0; f = 1 / 298.257223563; b = a * (1 - f);
-    ep2 = (a^2 - b^2) / b^2; e2 = 2 * f - f^2;
+    global a b f e2 ep2 gamma_a gamma_b m
     
     % Bowring's formulae for latitude, longitude, and height
     p = hypot(x(1), x(2));
@@ -131,11 +141,7 @@ end
 
 % Normal gravity vector in ECEF frame: ge = C_g^e * gamma^g (Appendix A, F)
 function ge = normal_gravity_ecef(x)
-    % WGS-84 ellipsoid constants
-    a = 6378137.0; f = 1 / 298.257223563; b = a * (1 - f);
-    e2 = 2 * f - f^2; ep2 = (a^2 - b^2) / b^2;
-    gamma_a = 9.7803253359; gamma_b = 9.8321849378;
-    m = (7292115e-11)^2 * a^2 * b / 3986004.418e8;
+    global a b f e2 ep2 gamma_a gamma_b m
 
     % Geodetic latitude, longitude, height (Bowring)
     [lat, lon, h] = ecef2geod(x);
