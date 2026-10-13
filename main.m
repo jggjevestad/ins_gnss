@@ -36,6 +36,7 @@ function main
     Cg_p = [ 0.994637,  0.099168, -0.029369;           % NED to platform frame
             -0.102838,  0.918074, -0.382837;
             -0.011003,  0.383804,  0.923349];
+    Cp_s = eye(3);
 
     % Read IMU observations
     [dw, dv, t] = read_imu(filename, N, t0);
@@ -47,9 +48,9 @@ function main
     wie_e = [0; 0; 7292115e-11];
     Wie_e = skew(wie_e);
 
-    % Initial attitude DCM: Cs_e = (Cg_p * Ce_g)'
+    % Initial attitude DCM: Cs_e = (Cp_s * Cg_p * Ce_g)'
     Ce_g = ecef2ned(x0_e);
-    Cs_e = (Cg_p * Ce_g)';
+    Cs_e = (Cp_s * Cg_p * Ce_g)';
 
     % State trajectories
     x_est = zeros(N, 3);
