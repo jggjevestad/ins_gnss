@@ -49,8 +49,8 @@ function main
     Wie_e = skew(wie_e);
 
     % Initial attitude DCM: Cs_e = (Cp_s * Cg_p * Ce_g)'
-    Ce_g = ecef2ned(x0_e);
-    Cs_e = (Cp_s * Cg_p * Ce_g)';
+    Ce_g0 = ecef2ned(x0_e);
+    Cs_e0 = (Cp_s * Cg_p * Ce_g0)';
 
     % State trajectories
     x_est = zeros(N, 3);
@@ -60,6 +60,7 @@ function main
 
     x = x0_e;
     v = v0_e;
+    Cs_e = Cs_e0;
 
     fprintf('\nPropagating navigation states (DCM mechanization, C.2 Eq. 59-62b)...\n');
     tic;
@@ -72,6 +73,9 @@ function main
 
         % DCM attitude integration (Eq. 31, 61)
         [Cs_e_next, rho] = integrate_dcm(Cs_e, dw_k, dt, wie_e);
+
+        % Normalize DCM
+        Cs_e_next = normalize(Cs_e_next);
 
         % Numerical integration of position and velocity (C.2, Eq. 59-62b)
         [x, v, ~] = integrate_pos_vel(x, v, dv_k, rho, dt, Cs_e_next, Wie_e);
@@ -114,18 +118,22 @@ function [Cs_e_next, rho] = integrate_dcm(Cs_e, dw, dt, wie_e)
     % Eq. (61): Rotation increment relative to ECEF frame
     rho = dw - Cs_e' * wie_e * dt;
     mag = norm(rho);
-    sk  = skew(rho);
+    Gamma  = skew(rho);
 
     % Relative DCM increment (matrix exponential via Rodrigues formula)
     if mag > 1e-12
-        dC = eye(3) + (sin(mag) / mag) * sk + ((1 - cos(mag)) / mag^2) * (sk * sk);
+        dC = eye(3) + (sin(mag) / mag) * Gamma + ((1 - cos(mag)) / mag^2) * (Gamma * Gamma);
     else
-        dC = eye(3) + sk + 0.5 * (sk * sk);
+        dC = eye(3) + Gamma + 0.5 * (Gamma * Gamma);
     end
 
-    % Update DCM and normalize to maintain orthogonality: C <- 1.5*C - 0.5*C*(C'*C)
+    % Update DCM
     Cs_e_next = Cs_e * dC;
-    Cs_e_next = 1.5 * Cs_e_next - 0.5 * Cs_e_next * (Cs_e_next' * Cs_e_next);
+end
+
+% Normalize a DCM to be orthogonal
+function C = normalize(C)
+    C = 1.5 * C - 0.5 * C * (C' * C);
 end
 
 % ECEF coordinates to geodetic coordinates (latitude, longitude, height)
