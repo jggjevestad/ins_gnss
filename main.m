@@ -16,7 +16,7 @@
 function main
     % System parameters
     filename = 'data/primary_imu.dat';
-    N = 3000;
+    N = 10000;
 
     % WGS-84 ellipsoid parameters
     global a b f e2 ep2 gamma_a gamma_b m
@@ -48,7 +48,7 @@ function main
     wie_e = [0; 0; 7292115e-11];
     Wie_e = skew(wie_e);
 
-    % Initial attitude DCM: Cs_e = (Cp_s * Cg_p * Ce_g)'
+    % Initial attitude DCM: Cs_e0 = (Cp_s * Cg_p * Ce_g0)'
     Ce_g0 = ecef2ned(x0_e);
     Cs_e0 = (Cp_s * Cg_p * Ce_g0)';
 
@@ -92,6 +92,9 @@ function main
 
     % Benchmark against reference trajectory if available
     compare_reference(t, x_est, v_est, 'data/traj.txt');
+
+    % Plot estimated position in g-frame using Ce_g0
+    plot_trajectory_g(t, x_est, x0_e, Ce_g0, 'data/traj.txt');
 end
 
 
@@ -242,4 +245,75 @@ function compare_reference(t_est, x_est, v_est, traj_file)
                 t_ref(i), pos_err, vel_err);
         end
     end
+end
+
+% Plot estimated position in g-frame (NED) using Ce_g0
+function plot_trajectory_g(t, x_est, x0_e, Ce_g0, traj_file)
+    if nargin < 5, traj_file = ''; end
+
+    % Transform estimated ECEF position to initial g-frame (NED) using Ce_g0
+    x_est_g = (x_est - x0_e') * Ce_g0';
+    time = t - t(1);
+
+    % Check and extract reference trajectory if available
+    has_ref = false;
+    if ~isempty(traj_file) && exist(traj_file, 'file')
+        traj = load(traj_file);
+        t_ref = traj(:, 1);
+        idx_ref = t_ref >= t(1) - 0.1 & t_ref <= t(end) + 0.1;
+        if any(idx_ref)
+            x_ref = traj(idx_ref, 2:4);
+            x_ref_g = (x_ref - x0_e') * Ce_g0';
+            t_ref_sub = t_ref(idx_ref) - t(1);
+            has_ref = true;
+        end
+    end
+
+    % --- Figure 1: Horizontal Trajectory (Separate Plot with Equal Spacing) ---
+    figure('Name', 'Horizontal Trajectory in g-frame (NED)', 'NumberTitle', 'off');
+    plot(x_est_g(:, 2), x_est_g(:, 1), 'b-', 'LineWidth', 1.5);
+    hold on;
+    if has_ref
+        plot(x_ref_g(:, 2), x_ref_g(:, 1), 'k--', 'LineWidth', 1.2);
+    end
+    plot(x_est_g(1, 2), x_est_g(1, 1), 'go', 'MarkerFaceColor', 'g', 'MarkerSize', 8);
+    plot(x_est_g(end, 2), x_est_g(end, 1), 'rs', 'MarkerFaceColor', 'r', 'MarkerSize', 8);
+    grid on;
+    axis equal;
+    xlabel('East [m]');
+    ylabel('North [m]');
+    title('Horizontal Trajectory in g-frame (NED)');
+    if has_ref
+        legend('Estimated', 'Reference', 'Start', 'End', 'Location', 'northeast');
+    else
+        legend('Estimated', 'Start', 'End', 'Location', 'northeast');
+    end
+
+    % --- Figure 2: Position Components in g-frame vs Time ---
+    figure('Name', 'Position Components in g-frame (NED)', 'NumberTitle', 'off');
+
+    % North component vs time
+    subplot(3, 1, 1);
+    plot(time, x_est_g(:, 1), 'b-', 'LineWidth', 1.5);
+    hold on; grid on;
+    if has_ref, plot(t_ref_sub, x_ref_g(:, 1), 'k--', 'LineWidth', 1.2); end
+    ylabel('North [m]');
+    title('Position Components in g-frame (NED)');
+
+    % East component vs time
+    subplot(3, 1, 2);
+    plot(time, x_est_g(:, 2), 'b-', 'LineWidth', 1.5);
+    hold on; grid on;
+    if has_ref, plot(t_ref_sub, x_ref_g(:, 2), 'k--', 'LineWidth', 1.2); end
+    ylabel('East [m]');
+
+    % Down component vs time
+    subplot(3, 1, 3);
+    plot(time, x_est_g(:, 3), 'b-', 'LineWidth', 1.5);
+    hold on; grid on;
+    if has_ref, plot(t_ref_sub, x_ref_g(:, 3), 'k--', 'LineWidth', 1.2); end
+    xlabel('Time [s]');
+    ylabel('Down [m]');
+
+    drawnow;
 end
