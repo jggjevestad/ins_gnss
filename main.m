@@ -105,17 +105,17 @@ function main
     fprintf('Loaded %d GNSS fixes in the dataset time window.\n', length(gnss.t));
 
     % Pre-allocate trajectory history arrays
-    x_est      = zeros(N, 3);
-    v_est      = zeros(N, 3);
-    b_f_est    = zeros(N, 3);
-    b_w_est    = zeros(N, 3);
-    P_diag_est = zeros(N, 15);
+    x_all      = zeros(N, 3);
+    v_all      = zeros(N, 3);
+    b_f_all    = zeros(N, 3);
+    b_w_all    = zeros(N, 3);
+    P_diag_all = zeros(N, 15);
 
-    x_est(1, :)      = x';
-    v_est(1, :)      = v';
-    b_f_est(1, :)    = b_f';
-    b_w_est(1, :)    = b_w';
-    P_diag_est(1, :) = diag(P)';
+    x_all(1, :)      = x';
+    v_all(1, :)      = v';
+    b_f_all(1, :)    = b_f';
+    b_w_all(1, :)    = b_w';
+    P_diag_all(1, :) = diag(P)';
 
     % Index tracker for aiding observations
     next_gnss_idx = 1;
@@ -149,7 +149,7 @@ function main
         % 1. DCM attitude integration (Eqs. 31, 61) via matrix exponential
         [Cs_e_next, rho] = integrate_dcm(Cs_e, dw_k, dt, wie_e);
 
-        % 2. Re-orthogonalize / normalize DCM to preserve orthonormality
+        % 2. Normalize DCM to preserve orthonormality
         Cs_e_next = normalize(Cs_e_next);
 
         % 3. Numerical integration of position and velocity (Appendix C.2, Eqs. 59-62b)
@@ -223,29 +223,29 @@ function main
         end
 
         % Store navigation estimates for logging and trajectory analysis
-        x_est(k+1, :)      = x';
-        v_est(k+1, :)      = v';
-        b_f_est(k+1, :)    = b_f';
-        b_w_est(k+1, :)    = b_w';
-        P_diag_est(k+1, :) = diag(P)';
+        x_all(k+1, :)      = x';
+        v_all(k+1, :)      = v';
+        b_f_all(k+1, :)    = b_f';
+        b_w_all(k+1, :)    = b_w';
+        P_diag_all(k+1, :) = diag(P)';
     end
     t_elapsed = toc;
 
     fprintf('Processing complete: %d epochs in %.3f s | GNSS updates performed: %d\n', ...
         N, t_elapsed, num_updates);
-    fprintf('Final estimated position [m]:   [%.4f, %.4f, %.4f]\n', x_est(end, :));
-    fprintf('Final estimated velocity [m/s]: [%.4f, %.4f, %.4f]\n', v_est(end, :));
-    fprintf('Final accel bias [mg]:          [%.2f, %.2f, %.2f]\n', b_f_est(end, :) * (1e3 / 9.80665));
-    fprintf('Final gyro bias [deg/h]:        [%.2f, %.2f, %.2f]\n', b_w_est(end, :) * (180 / pi * 3600));
+    fprintf('Final estimated position [m]:   [%.4f, %.4f, %.4f]\n', x_all(end, :));
+    fprintf('Final estimated velocity [m/s]: [%.4f, %.4f, %.4f]\n', v_all(end, :));
+    fprintf('Final accel bias [mg]:          [%.2f, %.2f, %.2f]\n', b_f_all(end, :) * (1e3 / 9.80665));
+    fprintf('Final gyro bias [deg/h]:        [%.2f, %.2f, %.2f]\n', b_w_all(end, :) * (180 / pi * 3600));
 
     % =========================================================================
     % Validation & Benchmark against Reference Trajectory
     % =========================================================================
-    compare_reference(t_imu, x_est, v_est, traj_filename);
+    compare_reference(t_imu, x_all, v_all, traj_filename);
 
     % Plot trajectories and diagnostics in local geodetic frame (NED)
-    plot_trajectory_g(t_imu, x_est, x0_e, Ce_g0, traj_filename);
-    plot_filter_diagnostics(t_imu, b_f_est, b_w_est, P_diag_est);
+    plot_trajectory_g(t_imu, x_all, x0_e, Ce_g0, traj_filename);
+    plot_filter_diagnostics(t_imu, b_f_all, b_w_all, P_diag_all);
 end
 
 
@@ -256,7 +256,7 @@ end
 % -----------------------------------------------------------------------------
 % Time update error state cov. matrix
 % -----------------------------------------------------------------------------
-function [P_prior, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, params)
+function [Pp, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, params)
     % Evaluates continuous system error dynamics matrix F (Eq. 45)
     F = error_system_matrix_F(x, v, Cs_e, f_s, Wie_e, params);
 
@@ -283,10 +283,10 @@ function [P_prior, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, para
     Q = G * W * G' * dt;
 
     % Prior covariance: P_prior = Phi * P * Phi' + Q
-    P_prior = Phi * P * Phi' + Q;
+    Pp = Phi * P * Phi' + Q;
 
     % Enforce exact symmetry
-    P_prior = 0.5 * (P_prior + P_prior');
+    %Pp = 0.5 * (Pp + Pp');
 end
 
 % -----------------------------------------------------------------------------
@@ -349,7 +349,7 @@ end
 % -----------------------------------------------------------------------------
 % Measurement Update
 % -----------------------------------------------------------------------------
-function [dx_hat, P_post, dz, S, K] = measurement_update_gnss(x, Cs_e, P_prior, z_pos, R_pos, ls)
+function [dx_hat, P, dz, S, K] = measurement_update_gnss(x, Cs_e, Pp, z_pos, R_pos, ls)
     % Transform antenna lever-arm from sensor to ECEF frame: l^e = Cs_e * l^s
     le = Cs_e * ls;
 
@@ -365,10 +365,10 @@ function [dx_hat, P_post, dz, S, K] = measurement_update_gnss(x, Cs_e, P_prior, 
     H(1:3, 7:9) = -skew(le);
 
     % Innovation covariance: S = H * P * H' + R (Eq. 17d)
-    S = H * P_prior * H' + R_pos;
+    S = H * Pp * H' + R_pos;
 
     % Kalman Gain K
-    K = (P_prior * H') / S;
+    K = (Pp * H') / S;
 
     % Error state estimate
     dx_hat = K * dz;
@@ -376,8 +376,8 @@ function [dx_hat, P_post, dz, S, K] = measurement_update_gnss(x, Cs_e, P_prior, 
     % Posterior covariance
     % Joseph stabilized form: P = (I - K*H)*P*(I - K*H)' + K*R*K'
     IKH = eye(15) - K * H;
-    P_post = IKH * P_prior * IKH' + K * R_pos * K';
-    P_post = 0.5 * (P_post + P_post');
+    P = IKH * Pp * IKH' + K * R_pos * K';
+    %P = 0.5 * (P + P');
 end
 
 % -----------------------------------------------------------------------------
@@ -390,7 +390,7 @@ function [x, v, Cs_e, b_f, b_w] = correct_nav_state(x, v, Cs_e, b_f, b_w, dx_hat
     % Velocity correction
     v = v + dx_hat(4:6);
 
-    % Attitude DCM correction (Strictly DCM)
+    % Attitude DCM correction
     % Cs_e = (I + Psi_e) * Cs_e, where Psi_e = skew(psi)
     psi = dx_hat(7:9);
     Cs_e = (eye(3) + skew(psi)) * Cs_e;
