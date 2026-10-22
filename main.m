@@ -42,7 +42,7 @@ function main
     m = (7292115e-11)^2 * a^2 * b / 3986004.418e8;  % Angular velocity squared times gravitational parameter
 
     % =========================================================================
-    % FIGURE 1 - BLOCK 1: Initial state
+    % BLOCK 1: Initial state
     % =========================================================================
     % Initial parameters from first line of data/traj.txt (epoch 198300.000259 s)
     t0   = 198300.000259;                              % Initial GPS Time of Week [s]
@@ -57,7 +57,7 @@ function main
     wie_e = [0; 0; 7292115e-11];
     Wie_e = skew(wie_e);
 
-    % Initial attitude DCM: Cs_e0 = (Cp_s * Cg_p * Ce_g0)' (Appendix A, Eq. 48)
+    % Initial attitude DCM: Cs_e0 = (Cp_s * Cg_p * Ce_g0)'
     Ce_g0 = ecef2ned(x0_e);
     Cs_e0 = (Cp_s * Cg_p * Ce_g0)';
     Cs_e0 = normalize(Cs_e0);
@@ -67,7 +67,7 @@ function main
     v    = v0_e;
     Cs_e = Cs_e0;
 
-    % Initial sensor bias estimates (Eq. 47a-b)
+    % Initial sensor bias estimates
     b_f = [0; 0; 0];  % Accelerometer bias in sensor frame [m/s^2]
     b_w = [0; 0; 0];  % Gyroscope bias in sensor frame [rad/s]
 
@@ -133,7 +133,7 @@ function main
         t_curr = t_imu(k+1);
 
         % =====================================================================
-        % FIGURE 1 - BLOCK 2: IMU measurements
+        % BLOCK 2: IMU measurements
         % =====================================================================
         % Raw sensor increments: dw (angular increment [rad]), dv (velocity increment [m/s])
         dw_raw = dw(k, :)';
@@ -144,20 +144,20 @@ function main
         dv_k = dv_raw - b_f * dt;
 
         % =====================================================================
-        % FIGURE 1 - BLOCK 3: Integrate navigation state
+        % BLOCK 3: Integrate navigation state
         % =====================================================================
-        % 1. DCM attitude integration (Eqs. 31, 61) via matrix exponential
+        % 1. DCM attitude integration via matrix exponential
         [Cs_e_next, rho] = integrate_dcm(Cs_e, dw_k, dt, wie_e);
 
         % 2. Normalize DCM to preserve orthonormality
         Cs_e_next = normalize(Cs_e_next);
 
-        % 3. Numerical integration of position and velocity (Appendix C.2, Eqs. 59-62b)
+        % 3. Numerical integration of position and velocity
         [x, v, ~] = integrate_pos_vel(x, v, dv_k, rho, dt, Cs_e_next, Wie_e);
         Cs_e = Cs_e_next;
 
         % =====================================================================
-        % FIGURE 1 - DECISION: Aiding obs. available?
+        % DECISION: Aiding obs. available?
         % =====================================================================
         % Check if a GNSS fix is available within tolerance around the current epoch
         aiding_available = false;
@@ -175,7 +175,7 @@ function main
         end
 
         % If GNSS epochs do not coincide exactly with IMU samples, consider
-        % state interpolation/extrapolation (Appendix G, page 14).
+        % state interpolation/extrapolation.
 
         if aiding_available
             % Time elapsed since last Kalman filter update
@@ -186,12 +186,12 @@ function main
             f_s = dv_k / dt;
 
             % =================================================================
-            % FIGURE 1 - BLOCK 5: Time update error state cov. matrix
+            % Time update error state cov. matrix
             % =================================================================
             [P, ~, ~] = time_update_cov(P, x, v, Cs_e, f_s, dt_kf, Wie_e, filter_params);
 
             % =================================================================
-            % FIGURE 1 - BLOCK 6: Measurement update
+            % Measurement update
             % =================================================================
             % GNSS Position fix and measurement covariance
             z_pos = gnss.pos(gnss_epoch_idx, :)';
@@ -206,14 +206,14 @@ function main
             [dx_hat, P, ~, ~, ~] = measurement_update_gnss(x, Cs_e, P, z_pos, R_pos, ls);
 
             % =================================================================
-            % FIGURE 1 - BLOCK 7: Correct navigation state
+            % Correct navigation state
             % =================================================================
-            % Correct position: x = x + dx_hat(1:3) (Eq. 46a)
-            % Correct velocity: v = v + dx_hat(4:6) (Eq. 46b)
-            % Correct attitude: Cs_e = (I + skew(psi)) * Cs_e (Eq. 46c, strictly DCM)
+            % Correct position: x = x + dx_hat(1:3)
+            % Correct velocity: v = v + dx_hat(4:6)
+            % Correct attitude: Cs_e = (I + skew(psi)) * Cs_e
             % Re-normalize Cs_e
-            % Correct sensor biases: b_f = b_f + dx_hat(10:12) (Eq. 47a)
-            %                        b_w = b_w + dx_hat(13:15) (Eq. 47b)
+            % Correct sensor biases: b_f = b_f + dx_hat(10:12)
+            %                        b_w = b_w + dx_hat(13:15)
             % Reset error state: dx_hat = 0 (closed-loop complementary filter)
             % -----------------------------------------------------------------
             [x, v, Cs_e, b_f, b_w] = correct_nav_state(x, v, Cs_e, b_f, b_w, dx_hat);
@@ -257,13 +257,13 @@ end
 % Time update error state cov. matrix
 % -----------------------------------------------------------------------------
 function [Pp, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, params)
-    % Evaluates continuous system error dynamics matrix F (Eq. 45)
+    % Evaluates continuous system error dynamics matrix
     F = error_system_matrix_F(x, v, Cs_e, f_s, Wie_e, params);
 
     % State transition matrix Phi
     % For aiding intervals (e.g. dt = 1.0 s), matrix exponential expm(F*dt)
-    % (Eq. 5) or interval sub-stepping (App. D, Eq. 63) ensures numerical stability.
-    % Truncated Taylor series (Eq. 6) may also be evaluated.
+    % or interval sub-stepping ensures numerical stability.
+    % Truncated Taylor series may also be evaluated.
     Phi = expm(F * dt);
 
     % Process noise covariance Q
@@ -279,14 +279,12 @@ function [Pp, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, params)
               repmat(params.s_ba, 3, 1); ...
               repmat(params.s_bg, 3, 1)]);
 
-    % 1st-order approximation: Q = G * W * G' * dt (Eq. 12 / 64)
+    % 1st-order approximation: Q = G * W * G' * dt
     Q = G * W * G' * dt;
 
     % Prior covariance: P_prior = Phi * P * Phi' + Q
     Pp = Phi * P * Phi' + Q;
 
-    % Enforce exact symmetry
-    %Pp = 0.5 * (Pp + Pp');
 end
 
 % -----------------------------------------------------------------------------
@@ -296,26 +294,26 @@ function F = error_system_matrix_F(x, v, Cs_e, f_s, Wie_e, params)
     % Specific force in ECEF frame [m/s^2]
     fe = Cs_e * f_s;
 
-    % Gravitational gradient tensor Gamma_e (Appendix E, Eqs. 65-66)
+    % Gravitational gradient tensor Gamma_e
     Gamma_e = gravitational_gradient_tensor(x);
 
-    % Construct 15x15 continuous F matrix according to Eq. (45)
+    % Construct 15x15 continuous F matrix
     F = zeros(15, 15);
 
-    % Row 1-3: Position error derivative: d(delta_x)/dt = delta_v (Eq. 37)
+    % Row 1-3: Position error derivative: d(delta_x)/dt = delta_v
     F(1:3, 4:6) = eye(3);
 
-    % Row 4-6: Velocity error derivative (Eq. 36)
+    % Row 4-6: Velocity error derivative
     % d(delta_v)/dt = (Gamma_e - Wie_e*Wie_e)*delta_x - 2*Wie_e*delta_v - [fe x]*psi - Cs_e*delta_b_f
     F(4:6, 1:3)   = Gamma_e - Wie_e * Wie_e;
     F(4:6, 4:6)   = -2 * Wie_e;
     F(4:6, 7:9)   = -skew(fe);
-    F(4:6, 10:12) = -Cs_e;   % Sensor accel bias into velocity error (Eq. 45)
+    F(4:6, 10:12) = -Cs_e;   % Sensor accel bias into velocity error
 
-    % Row 7-9: Attitude error derivative (Eq. 44)
+    % Row 7-9: Attitude error derivative
     % d(psi)/dt = -Wie_e*psi - Cs_e*delta_b_w
     F(7:9, 7:9)   = -Wie_e;
-    F(7:9, 13:15) = -Cs_e;   % Sensor gyro bias into attitude error (Eq. 45)
+    F(7:9, 13:15) = -Cs_e;   % Sensor gyro bias into attitude error
 
     % Row 10-12: Accelerometer bias dynamics (First-order Gauss-Markov or Random Walk)
     if isfinite(params.tau_a) && params.tau_a > 0
@@ -337,12 +335,12 @@ function Gamma_e = gravitational_gradient_tensor(x)
     if r < 1e3, r = 6371000; end
     e = x / r;
 
-    % Schuler frequency: omega_s = sqrt(||g|| / Re) (Eq. 66)
+    % Schuler frequency: omega_s = sqrt(||g|| / Re)
     Re = 6378137.0;       % Earth radius [m]
     g_mag = 9.81;         % Approximate gravity magnitude [m/s^2]
     omega_s = sqrt(g_mag / Re);
 
-    % Gravitational gradient tensor: Gamma_e = omega_s^2 * (3*e*e' - I) (Eq. 65)
+    % Gravitational gradient tensor: Gamma_e = omega_s^2 * (3*e*e' - I)
     Gamma_e = (omega_s^2) * (3 * (e * e') - eye(3));
 end
 
@@ -364,7 +362,7 @@ function [dx_hat, P, dz, S, K] = measurement_update_gnss(x, Cs_e, Pp, z_pos, R_p
     H(1:3, 1:3) = eye(3);
     H(1:3, 7:9) = -skew(le);
 
-    % Innovation covariance: S = H * P * H' + R (Eq. 17d)
+    % Innovation covariance: S = H * P * H' + R
     S = H * Pp * H' + R_pos;
 
     % Kalman Gain K
@@ -377,7 +375,7 @@ function [dx_hat, P, dz, S, K] = measurement_update_gnss(x, Cs_e, Pp, z_pos, R_p
     % Joseph stabilized form: P = (I - K*H)*P*(I - K*H)' + K*R*K'
     IKH = eye(15) - K * H;
     P = IKH * Pp * IKH' + K * R_pos * K';
-    %P = 0.5 * (P + P');
+
 end
 
 % -----------------------------------------------------------------------------
@@ -395,7 +393,7 @@ function [x, v, Cs_e, b_f, b_w] = correct_nav_state(x, v, Cs_e, b_f, b_w, dx_hat
     psi = dx_hat(7:9);
     Cs_e = (eye(3) + skew(psi)) * Cs_e;
 
-    % Re-orthogonalize / normalize DCM to maintain mathematical orthogonality
+    % Normalize DCM to maintain orthogonality
     Cs_e = normalize(Cs_e);
 
     % Sensor bias corrections
@@ -410,13 +408,13 @@ function [x, v, dv_e] = integrate_pos_vel(x, v, dv, rho, dt, Cs_e_next, Wie_e)
     % Midpoint average DCM over update interval
     Cbar = Cs_e_next * (eye(3) - 0.5 * skew(rho));
 
-    % Normal gravity vector in ECEF frame: ge = C_g^e * gamma^g (Appendix F)
+    % Normal gravity vector in ECEF frame: ge = C_g^e * gamma^g
     ge = normal_gravity_ecef(x);
 
-    % Eq. (59): Velocity increment transformed to ECEF with Coriolis and gravity
+    % Velocity increment transformed to ECEF with Coriolis and gravity
     dv_e = Cbar * dv - (2 * Wie_e * v - ge) * dt;
 
-    % Eq. (62a-b): Position and velocity updates
+    % Position and velocity updates
     x = x + v * dt + dv_e * (dt / 2);
     v = v + dv_e;
 end
@@ -437,7 +435,7 @@ function [Cs_e_next, rho] = integrate_dcm(Cs_e, dw, dt, wie_e)
         dC = eye(3) + Gamma + 0.5 * (Gamma * Gamma);
     end
 
-    % Update DCM: Cs_e(t_{k+1}) = Cs_e(t_k) * dC (Eq. 31)
+    % Update DCM: Cs_e(t_{k+1}) = Cs_e(t_k) * dC
     Cs_e_next = Cs_e * dC;
 end
 
