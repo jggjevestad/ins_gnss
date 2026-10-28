@@ -262,8 +262,6 @@ function [Pp, Phi, Q] = time_update_cov(P, x, v, Cs_e, f_s, dt, Wie_e, params)
 
     % State transition matrix Phi
     % For aiding intervals (e.g. dt = 1.0 s), matrix exponential expm(F*dt)
-    % or interval sub-stepping ensures numerical stability.
-    % Truncated Taylor series may also be evaluated.
     Phi = expm(F * dt);
 
     % Process noise covariance Q
