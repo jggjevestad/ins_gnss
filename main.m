@@ -623,6 +623,7 @@ end
 % -----------------------------------------------------------------------------
 function plot_trajectory_g(t, x_est, x0_e, Ce_g0, traj_file)
     if nargin < 5, traj_file = ''; end
+    graphics_toolkit('qt');
 
     x_est_g = (x_est - x0_e') * Ce_g0';
     time = t - t(1);
@@ -684,6 +685,7 @@ end
 % Plot filter diagnostics: Estimated sensor biases and 3-sigma uncertainty bounds
 % -----------------------------------------------------------------------------
 function plot_filter_diagnostics(t, b_f_est, b_w_est, P_diag_est)
+    graphics_toolkit('qt');
     time = t - t(1);
 
     figure('Name', 'Estimated Sensor Biases & Uncertainties', 'NumberTitle', 'off');
