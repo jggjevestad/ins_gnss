@@ -624,6 +624,11 @@ end
 function plot_trajectory_g(t, x_est, x0_e, Ce_g0, traj_file)
     if nargin < 5, traj_file = ''; end
     graphics_toolkit('qt');
+    warning('off', 'Octave:missing-glyph');
+    warning('off', 'Octave:glyph-render');
+    set(0, 'DefaultAxesGridLineStyle', '-', ...
+           'DefaultAxesGridAlpha', 0.25, ...
+           'DefaultTextInterpreter', 'none');
 
     x_est_g = (x_est - x0_e') * Ce_g0';
     time = t - t(1);
@@ -646,7 +651,7 @@ function plot_trajectory_g(t, x_est, x0_e, Ce_g0, traj_file)
     plot(x_est_g(:, 2), x_est_g(:, 1), 'b-', 'LineWidth', 1.5);
     hold on;
     if has_ref
-        plot(x_ref_g(:, 2), x_ref_g(:, 1), 'k--', 'LineWidth', 1.2);
+        plot(x_ref_g(:, 2), x_ref_g(:, 1), 'r-', 'LineWidth', 1.2);
     end
     plot(x_est_g(1, 2), x_est_g(1, 1), 'go', 'MarkerFaceColor', 'g', 'MarkerSize', 8);
     plot(x_est_g(end, 2), x_est_g(end, 1), 'rs', 'MarkerFaceColor', 'r', 'MarkerSize', 8);
@@ -669,7 +674,7 @@ function plot_trajectory_g(t, x_est, x0_e, Ce_g0, traj_file)
         plot(time, x_est_g(:, ax), 'b-', 'LineWidth', 1.5);
         hold on; grid on;
         if has_ref
-            plot(t_ref_sub, x_ref_g(:, ax), 'k--', 'LineWidth', 1.2);
+            plot(t_ref_sub, x_ref_g(:, ax), 'r-', 'LineWidth', 1.2);
         end
         ylabel(labels{ax});
         if ax == 1
@@ -686,6 +691,11 @@ end
 % -----------------------------------------------------------------------------
 function plot_filter_diagnostics(t, b_f_est, b_w_est, P_diag_est)
     graphics_toolkit('qt');
+    warning('off', 'Octave:missing-glyph');
+    warning('off', 'Octave:glyph-render');
+    set(0, 'DefaultAxesGridLineStyle', '-', ...
+           'DefaultAxesGridAlpha', 0.25, ...
+           'DefaultTextInterpreter', 'none');
     time = t - t(1);
 
     figure('Name', 'Estimated Sensor Biases & Uncertainties', 'NumberTitle', 'off');
@@ -714,9 +724,9 @@ function plot_filter_diagnostics(t, b_f_est, b_w_est, P_diag_est)
     plot(time, 3 * sigma_pos, 'LineWidth', 1.2);
     grid on;
     xlabel('Time [s]');
-    ylabel('3\sigma Position Bound [m]');
-    title('Position Uncertainty Bounds (3\sigma)');
-    legend('X_e', 'Y_e', 'Z_e', 'Location', 'northeast');
+    ylabel('3-sigma Position Bound [m]');
+    title('Position Uncertainty Bounds (3-sigma)');
+    legend('Xe', 'Ye', 'Ze', 'Location', 'northeast');
 
     % Velocity 3-sigma uncertainty [m/s]
     subplot(2, 2, 4);
@@ -724,9 +734,9 @@ function plot_filter_diagnostics(t, b_f_est, b_w_est, P_diag_est)
     plot(time, 3 * sigma_vel, 'LineWidth', 1.2);
     grid on;
     xlabel('Time [s]');
-    ylabel('3\sigma Velocity Bound [m/s]');
-    title('Velocity Uncertainty Bounds (3\sigma)');
-    legend('V_{x,e}', 'V_{y,e}', 'V_{z,e}', 'Location', 'northeast');
+    ylabel('3-sigma Velocity Bound [m/s]');
+    title('Velocity Uncertainty Bounds (3-sigma)');
+    legend('Vx,e', 'Vy,e', 'Vz,e', 'Location', 'northeast');
 
     drawnow;
 end
